@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FIRE達成時期シミュレーター MVP</title>
+<style>
+body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;max-width:1000px;margin:0 auto;padding:24px;background:#f6f7f9;color:#222}
+h1{margin-bottom:6px}.note{color:#666;font-size:14px}
+.card{background:#fff;border-radius:14px;padding:20px;margin:16px 0;box-shadow:0 2px 10px #0000000d}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}
+label{font-size:14px;color:#555}input{width:100%;box-sizing:border-box;padding:10px;margin-top:5px;border:1px solid #ccc;border-radius:8px;font-size:16px}
+button{padding:12px 20px;border:0;border-radius:9px;background:#222;color:#fff;font-size:16px;cursor:pointer;margin-top:16px}
+.results{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.result{padding:15px;background:#f1f3f5;border-radius:10px}.big{font-size:24px;font-weight:700}
+table{width:100%;border-collapse:collapse}th,td{padding:9px;border-bottom:1px solid #ddd;text-align:right}th:first-child,td:first-child{text-align:left}
+canvas{width:100%;height:300px;border:1px solid #eee;border-radius:10px}
+.warn{font-size:13px;color:#666;line-height:1.6}
+@media(max-width:650px){.results{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<h1>FIRE達成時期シミュレーター</h1>
+<p class="note">MVP版：現在資産・積立・利回り・生活費から、FIRE目標額と到達年齢を概算します。</p>
+
+<div class="card">
+<h2>条件入力</h2>
+<div class="grid">
+<label>現在年齢<input id="age" type="number" value="31"></label>
+<label>現在の資産（万円）<input id="assets" type="number" value="750"></label>
+<label>毎月の積立額（万円）<input id="monthly" type="number" value="15" step="0.1"></label>
+<label>想定年利（%）<input id="return" type="number" value="5" step="0.1"></label>
+<label>年間生活費（万円）<input id="spend" type="number" value="360"></label>
+<label>FIRE後の年間収入（万円）<input id="income" type="number" value="0"></label>
+</div>
+<button onclick="simulate()">シミュレーションする</button>
+</div>
+
+<div class="card">
+<h2>結果</h2>
+<div class="results" id="summary"></div>
+<div id="table"></div>
+</div>
+
+<div class="card">
+<h2>資産推移</h2>
+<canvas id="chart" width="900" height="300"></canvas>
+</div>
+
+<div class="card warn">
+<strong>注意</strong><br>
+これは一定の年利で運用し、毎月一定額を積み立てる単純モデルです。実際の市場ではリターンが年ごとに変動し、税金・インフレ・手数料・社会保障・住宅ローン・教育費なども結果に影響します。また、3%・3.5%・4%は「安全を保証する率」ではありません。特にFIREは30年以上の運用期間になる可能性があるため、複数の取り崩し率を比較する設計にしています。
+</div>
+
+<script>
+function yen(n){return Math.round(n).toLocaleString()+"万円";}
+function calcTarget(spend,income,rate){return Math.max(0,spend-income)/rate;}
+function simulate(){
+ const age=+document.getElementById("age").value;
+ let assets=+document.getElementById("assets").value;
+ const monthly=+document.getElementById("monthly").value;
+ const r=+document.getElementById("return").value/100;
+ const spend=+document.getElementById("spend").value;
+ const income=+document.getElementById("income").value;
+ const rates=[.03,.035,.04];
+ const rows=[];
+ let age40=assets;
+ let series=[{age,assets}];
+ let found={};
+ for(let y=1;y<=80;y++){
+   // 年末に積立すると仮定した簡易計算
+   assets=assets*(1+r)+monthly*12;
+   const a=age+y;
+   series.push({age:a,assets});
+   rates.forEach(rate=>{
+     const target=calcTarget(spend,income,rate);
+     if(found[rate]===undefined && assets>=target) found[rate]=a;
+   });
+ }
+ let html="";
+ rates.forEach(rate=>{
+   const target=calcTarget(spend,income,rate);
+   const fa=found[rate]===undefined?"80歳までに未達":found[rate]+"歳";
+   html+=`<div class="result"><div>${(rate*100).toFixed(1)}%取り崩し</div><div class="big">${yen(target)}</div><div>到達目安：${fa}</div></div>`;
+ });
+ document.getElementById("summary").innerHTML=html;
+ let t="<table><tr><th>取り崩し率</th><th>必要資産</th><th>FIRE到達年齢</th></tr>";
+ rates.forEach(rate=>{
+   t+=`<tr><td>${(rate*100).toFixed(1)}%</td><td>${yen(calcTarget(spend,income,rate))}</td><td>${found[rate]===undefined?"80歳までに未達":found[rate]+"歳"}</td></tr>`;
+ });
+ t+="</table>";
+ document.getElementById("table").innerHTML=t;
+ draw(series,rates.map(x=>calcTarget(spend,income,x)));
+}
+function draw(series,targets){
+ const c=document.getElementById("chart"),ctx=c.getContext("2d");
+ ctx.clearRect(0,0,c.width,c.height);
+ const pad={l:60,r:20,t:20,b:40}, W=c.width-pad.l-pad.r,H=c.height-pad.t-pad.b;
+ const max=Math.max(...series.map(x=>x.assets),...targets)*1.08;
+ const minAge=series[0].age,maxAge=series[series.length-1].age;
+ ctx.strokeStyle="#ddd";ctx.lineWidth=1;
+ for(let i=0;i<=5;i++){let y=pad.t+H*i/5;ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(pad.l+W,y);ctx.stroke();}
+ ctx.beginPath();ctx.strokeStyle="#222";ctx.lineWidth=3;
+ series.forEach((p,i)=>{let x=pad.l+(p.age-minAge)/(maxAge-minAge)*W;let y=pad.t+H-(p.assets/max)*H;i?ctx.lineTo(x,y):ctx.moveTo(x,y);});ctx.stroke();
+ ctx.fillStyle="#555";ctx.font="14px sans-serif";ctx.fillText("資産（万円）",8,18);ctx.fillText(minAge+"歳",pad.l,pad.t+H+25);ctx.fillText(maxAge+"歳",pad.l+W-35,pad.t+H+25);
+}
+simulate();
+</script>
+</body>
+</html>
