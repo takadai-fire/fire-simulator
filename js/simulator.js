@@ -1,5 +1,18 @@
 function yen(n) {
-  return Math.round(n).toLocaleString() + "万円";
+  n = Math.round(n);
+
+  if (n >= 10000) {
+    const oku = Math.floor(n / 10000);
+    const man = n % 10000;
+
+    if (man === 0) {
+      return oku.toLocaleString() + "億円";
+    }
+
+    return oku.toLocaleString() + "億" + man.toLocaleString() + "万円";
+  }
+
+  return n.toLocaleString() + "万円";
 }
 function calcTarget(spend, income, rate) {
   return Math.max(0, spend - income) / rate;
