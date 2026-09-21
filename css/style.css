@@ -103,6 +103,12 @@ canvas {
     line-height: 1.6
 }
 
+.chart-note {
+  margin-top: 10px;
+  font-size: 13px;
+  color: #666;
+}
+
 @media(max-width:650px) {
     .results {
     grid-template-columns: 1fr
